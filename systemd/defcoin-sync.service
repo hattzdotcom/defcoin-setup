@@ -1,0 +1,18 @@
+[Unit]
+Description=Defcoin eIquidus block sync daemon
+After=mongod.service defcoind.service
+Requires=mongod.service
+
+[Service]
+Type=simple
+User=defcoin
+Group=defcoin
+WorkingDirectory=/opt/defcoin-explorer
+ExecStart=/usr/bin/node /opt/defcoin-explorer/scripts/sync.js index update
+Restart=always
+RestartSec=30
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

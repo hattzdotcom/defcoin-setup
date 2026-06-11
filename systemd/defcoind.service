@@ -1,0 +1,17 @@
+[Unit]
+Description=Defcoin daemon
+After=network.target
+
+[Service]
+Type=forking
+User=defcoin
+Group=defcoin
+PIDFile=/home/defcoin/.defcoin/defcoind.pid
+ExecStart=/usr/local/bin/defcoind -datadir=/home/defcoin/.defcoin -pid=/home/defcoin/.defcoin/defcoind.pid -daemon
+ExecStop=/usr/local/bin/defcoin-cli -datadir=/home/defcoin/.defcoin stop
+Restart=on-failure
+RestartSec=30
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,18 @@
+[Unit]
+Description=Defcoin eIquidus block explorer web UI
+After=network.target mongod.service defcoind.service
+Requires=mongod.service
+
+[Service]
+Type=simple
+User=defcoin
+Group=defcoin
+WorkingDirectory=/opt/defcoin-explorer
+ExecStart=/usr/bin/node /opt/defcoin-explorer/bin/cluster
+Restart=on-failure
+RestartSec=15
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

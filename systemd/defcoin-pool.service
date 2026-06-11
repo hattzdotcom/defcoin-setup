@@ -1,0 +1,18 @@
+[Unit]
+Description=Defcoin UNOMP mining pool
+After=network.target redis.service defcoind.service
+Requires=redis.service
+
+[Service]
+Type=simple
+User=defcoin
+Group=defcoin
+WorkingDirectory=/opt/defcoin-pool
+ExecStart=/usr/bin/node /opt/defcoin-pool/init.js
+Restart=on-failure
+RestartSec=15
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
