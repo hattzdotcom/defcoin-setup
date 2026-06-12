@@ -73,7 +73,7 @@ rpcallowip=127.0.0.1
 rpcport=17332
 
 # P2P port (must be open in Azure NSG)
-port=17333
+port=1337
 
 # Index all transactions (required by eIquidus)
 txindex=1

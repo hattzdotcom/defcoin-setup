@@ -8,7 +8,7 @@ Automated setup scripts for running a [Defcoin (DFC)](https://github.com/defcoin
 
 | Service | Port | Notes |
 |---|---|---|
-| defcoind | 17332 (RPC), 17333 (P2P) | Defcoin-Core-Nu v26.3.1 |
+| defcoind | 17332 (RPC), 1337 (P2P) | Defcoin-Core-Nu v26.3.1 |
 | UNOMP mining pool | 3333 (stratum), 8080 (web) | scrypt, varDiff |
 | eIquidus explorer | 3001 (web) | ~50 hour initial block sync |
 | nginx | 80/443 | Reverse proxy + Let's Encrypt SSL |
@@ -18,7 +18,7 @@ Automated setup scripts for running a [Defcoin (DFC)](https://github.com/defcoin
 - Ubuntu 22.04 LTS VM (tested on Azure Standard_B2s — 2 vCPU, 4 GB RAM)
 - 64 GB disk (chain grows ~10 GB/year)
 - Public IP and DNS A records for your pool/explorer domains
-- Ports 17333 and 3333 open inbound in your firewall/NSG
+- Ports 1337 and 3333 open inbound in your firewall/NSG
 
 ## Quick start
 
@@ -114,5 +114,5 @@ VarDiff adjusts your difficulty automatically (min 0.5, max 512, targeting ~15 s
 - Block time: 2 minutes
 - Total supply: ~84 million DFC
 - Address prefix: D (byte 30)
-- P2P port: 17333
+- P2P port: 1337
 - RPC port: 17332
