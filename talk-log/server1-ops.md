@@ -115,3 +115,50 @@ callback.
 
 Runs as a one-shot unit with `Restart=always` and `RestartSec=30`. Status showing
 `activating` between runs is normal — not stuck.
+
+---
+
+## defcoind.service — crash loop fix (2026-06-29)
+
+**Symptom:** After a VM reboot, `systemctl status defcoind` shows
+`activating (auto-restart) (Result: exit-code)` in a tight loop. defcoind was
+actually running and serving RPC, but systemd wasn't tracking it correctly.
+
+**Root cause:** Stale or invalid `.defcoin/defcoind.pid` from the previous run.
+`Type=forking` reads the PID file after the daemon forks. If the file has wrong
+content, systemd can't track the child process, marks the service as failed, and
+`Restart=on-failure` fires. Each restart attempt hits the lock held by the still-
+running defcoind — counter goes to 90+ before systemd is manually stopped.
+
+**Fix:** `ExecStartPre=-/bin/rm -f /home/defcoin/.defcoin/defcoind.pid` clears the
+stale PID file before each start. `TimeoutStartSec=600` and `TimeoutStopSec=300`
+give defcoind enough time to load the full block index and flush on shutdown.
+
+See `systemd/defcoind.service` for the current unit.
+
+---
+
+## chainparams.cpp — added DNS seed (2026-06-29)
+
+`seed.fuckyyourcoins.com` added to `vSeeds` in
+`/home/defcoin/Defcoin-Core-Nu/source/src/chainparams.cpp` and DefcoinCoreNu
+rebuilt on this node. Seed is live and returning peer IPs.
+
+---
+
+## Magic bytes — network migration (2026-06-29)
+
+Two magic byte values exist on the network during migration:
+- `fbc0b6db` — legacy (Litecoin-compatible), used by DefcoinCore:1.0.0 nodes
+- `defc014e` — current, used by all DefcoinCoreNu:26.x nodes
+
+**August 1, 2026 — hard enforcement cutoff.** DefcoinCoreNu will stop accepting
+legacy magic after this date (per README and release notes in upstream repo).
+
+This node stays in **compatibility mode** (default: `acceptlegacymagic=true`).
+The pool needs to propagate blocks to all miners including old-magic nodes.
+Setting `acceptlegacymagic=0` on this node caused an OOM-triggered VM crash
+on 2026-06-29 — do not set this here until the network has mostly migrated.
+
+The relay node (20.125.148.47) runs `acceptlegacymagic=0` to build the
+clean-magic peer set for post-cutoff operation.

@@ -5,11 +5,10 @@ After=network.target
 [Service]
 Type=forking
 User=defcoin
-Group=defcoin
 PIDFile=/home/defcoin/.defcoin/defcoind.pid
 ExecStartPre=-/bin/rm -f /home/defcoin/.defcoin/defcoind.pid
-ExecStart=/usr/local/bin/defcoind -daemon -datadir=/home/defcoin/.defcoin -pid=/home/defcoin/.defcoin/defcoind.pid
-ExecStop=/usr/local/bin/defcoin-cli -datadir=/home/defcoin/.defcoin stop
+ExecStart=/usr/local/bin/defcoind -daemon -conf=/home/defcoin/.defcoin/defcoin.conf -datadir=/home/defcoin/.defcoin
+ExecStop=/usr/local/bin/defcoin-cli -conf=/home/defcoin/.defcoin/defcoin.conf stop
 Restart=on-failure
 RestartSec=30
 TimeoutStartSec=600
