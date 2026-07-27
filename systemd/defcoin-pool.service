@@ -1,13 +1,19 @@
 [Unit]
 Description=Defcoin UNOMP mining pool
 After=network.target redis.service defcoind.service
-Requires=redis.service
+Requires=redis.service defcoind.service
 
 [Service]
 Type=simple
 User=defcoin
 Group=defcoin
 WorkingDirectory=/opt/defcoin-pool
+# defcoind.service reports "started" once it forks/writes its PID file, well
+# before RPC is actually ready. The pool's init only calls validateaddress
+# once and gives up (without retrying) if it fails, silently never binding
+# the stratum port while systemd still shows the service as active. Wait for
+# real RPC readiness first.
+ExecStartPre=/home/defcoin/scripts/wait-for-defcoind.sh 300
 ExecStart=/usr/bin/node /opt/defcoin-pool/init.js
 Restart=on-failure
 RestartSec=15
