@@ -100,6 +100,10 @@ sgminer -k scrypt -o stratum+tcp://pool.defcoin.fun:3333 -u YOUR_DFC_ADDRESS -p 
 
 VarDiff adjusts your difficulty automatically (min 0.5, max 512, targeting ~15 sec/share). Minimum payout: 0.5 DFC.
 
+## Direct block-relay push (blocknotify)
+
+To reduce orphan/fork risk between cooperating pool nodes, we run a small `blocknotify`-triggered script that pushes newly-found blocks directly to trusted peers' RPC via `submitblock`, bypassing normal P2P gossip delay. See [`docs/dc902-fork-and-relay-plan.md`](docs/dc902-fork-and-relay-plan.md) for the incident that motivated it, how it works, how to set it up, and the suggested plan for extending it to other pool operators.
+
 ## Known issues / TODO
 
 - [ ] Explorer takes ~50 hours to do its initial block sync (~2.3M blocks as of June 2026)
