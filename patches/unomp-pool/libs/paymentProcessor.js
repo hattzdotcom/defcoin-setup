@@ -392,13 +392,15 @@ function SetupForPool(logger, poolOptions, setupFinished){
                 // active workers this round instead of letting it accumulate unpaid.
                 var REDISTRIBUTE_THRESHOLD_SATOSHIS = coinsToSatoshies(100);
 
-                // Reserved off the top of spendable funds so sendmany's actual network
-                // (gas) fee never itself triggers an insufficient-funds error. 0.1 DFC
-                // baseline -- doubles on retry if that's still not enough (see
-                // attempt() below). Advertised to miners up front on the pool website
-                // (website/pages/getting_started.html and index page, "Network fee" note)
-                // -- keep that number in sync with this constant.
-                var FEE_RESERVE_SATOSHIS = coinsToSatoshies(0.1);
+                // 0.1% withheld from each individual payout to cover this tx's network
+                // (gas) fee -- proportional, not a flat amount, specifically so it
+                // never disproportionately eats into a payout near the minimum (a flat
+                // reserve large enough to cover a big batch's fee could, on its own,
+                // block a lone worker's 0.5 DFC payout entirely). Doubles on retry if
+                // that's still not enough (see attempt() below). Advertised to miners
+                // up front on the pool website (website/pages/getting_started.html and
+                // index page, "Pool fee" note) -- keep that number in sync.
+                var POOL_FEE_PERCENT = 0.001;
 
                 // Any single worker with a large outstanding balance (e.g. the pool's
                 // own leftover balance sitting mostly immature) must never be able to
@@ -508,18 +510,17 @@ function SetupForPool(logger, poolOptions, setupFinished){
                         var spendableSatoshis = coinsToSatoshies(spendableCoins);
                         var MAX_RETRIES = 5;
 
-                        // A batch built from *reported* spendable balance can still hit
+                        // A batch sized to *reported* spendable balance can still hit
                         // -6 Insufficient funds: this wallet holds many small coinbase
                         // UTXOs, and funding a large send can require enough of them
-                        // that the real network fee comes out well above our flat
-                        // reserve estimate. Each retry doubles the reserve and rebuilds
-                        // the allocation from scratch -- since it's still smallest-owed
-                        // first, that reservation growth only ever eats into the
-                        // largest payee's amount, never bumps a smaller, already-cheap
-                        // payout back out of the batch.
+                        // that the real network fee comes out above our withheld %.
+                        // Each retry doubles the withhold percentage and rebuilds the
+                        // allocation from scratch -- still proportional, so it never
+                        // reintroduces the "flat amount blocks a small payout" problem,
+                        // it just leaves a bigger per-payout margin.
                         var attempt = function(retryCount) {
-                            var feeReserve = FEE_RESERVE_SATOSHIS * Math.pow(2, retryCount);
-                            var remaining = spendableSatoshis - feeReserve;
+                            var feePercent = POOL_FEE_PERCENT * Math.pow(2, retryCount);
+                            var remaining = spendableSatoshis;
                             var addressAmounts = {};
                             var pendingPayable = [];
                             var totalSent = 0;
@@ -533,9 +534,12 @@ function SetupForPool(logger, poolOptions, setupFinished){
                                     return;
                                 }
 
-                                var amountToPay = Math.min(res.owed, Math.max(remaining, 0));
+                                // grossAmount is what leaves the worker's owed balance;
+                                // netAmount (after the withheld %) is what's actually
+                                // sent on-chain -- the difference covers this tx's fee.
+                                var grossAmount = Math.min(res.owed, Math.max(remaining, 0));
 
-                                if (amountToPay < minPaymentSatoshis) {
+                                if (grossAmount < minPaymentSatoshis) {
                                     // not enough spendable left this cycle to make a
                                     // meaningful payment -- wait for a later cycle
                                     worker.balanceChange = worker.reward;
@@ -543,14 +547,16 @@ function SetupForPool(logger, poolOptions, setupFinished){
                                     return;
                                 }
 
-                                pendingPayable.push({w: res.w, worker: worker, amountToPay: amountToPay});
+                                var netAmount = Math.floor(grossAmount * (1 - feePercent));
+
+                                pendingPayable.push({w: res.w, worker: worker, grossAmount: grossAmount, netAmount: netAmount});
                                 // multiple worker keys (e.g. "addr.rig1", "addr.rig2") can
                                 // resolve to the same underlying address -- sum into
                                 // addressAmounts rather than overwrite, since sendmany
                                 // takes one amount per address, not per worker.
-                                addressAmounts[res.address] = (addressAmounts[res.address] || 0) + satoshisToCoins(amountToPay);
-                                totalSent += amountToPay;
-                                remaining -= amountToPay;
+                                addressAmounts[res.address] = (addressAmounts[res.address] || 0) + satoshisToCoins(netAmount);
+                                totalSent += netAmount;
+                                remaining -= grossAmount;
                             });
 
                             logger.info(logSystem, logComponent, 'addressAccount:');
@@ -578,13 +584,13 @@ function SetupForPool(logger, poolOptions, setupFinished){
                                 if (result.error && result.error.code === -6) {
                                     if (retryCount >= MAX_RETRIES) {
                                         logger.error(logSystem, logComponent, 'Insufficient spendable funds after '
-                                            + MAX_RETRIES + ' attempts even after growing the fee reserve -- deferring to next cycle, nothing deducted');
+                                            + MAX_RETRIES + ' attempts even after growing the fee withhold -- deferring to next cycle, nothing deducted');
                                         deferPendingPayable();
                                         callback(null, workers, rounds);
                                         return;
                                     }
-                                    logger.error(logSystem, logComponent, 'Not enough funds to cover the tx fee, growing fee reserve to '
-                                        + satoshisToCoins(feeReserve * 2) + ' DFC and retrying (' + (retryCount + 1) + '/' + MAX_RETRIES + ')');
+                                    logger.error(logSystem, logComponent, 'Not enough funds to cover the tx fee, growing fee withhold to '
+                                        + (feePercent * 200) + '% and retrying (' + (retryCount + 1) + '/' + MAX_RETRIES + ')');
                                     attempt(retryCount + 1);
                                     return;
                                 }
@@ -602,8 +608,8 @@ function SetupForPool(logger, poolOptions, setupFinished){
                                 // payment genuinely succeeded -- only now is it safe to deduct
                                 pendingPayable.forEach(function(res) {
                                     var worker = res.worker;
-                                    worker.sent = satoshisToCoins(res.amountToPay);
-                                    worker.balanceChange = worker.reward - res.amountToPay;
+                                    worker.sent = satoshisToCoins(res.netAmount);
+                                    worker.balanceChange = worker.reward - res.grossAmount;
                                 });
                                 callback(null, workers, rounds);
                             }, true, true);
