@@ -22,6 +22,22 @@ if [[ "$POOL_WALLET_ADDRESS" == "CHANGE_ME_YOUR_DEFCOIN_ADDRESS" ]]; then
     echo "ERROR: Edit vars.sh and set your POOL_WALLET_ADDRESS before running."
     exit 1
 fi
+if [[ "$ADMIN_PASS" == "CHANGE_ME_ADMIN_PASS" ]]; then
+    echo "ERROR: Edit vars.sh and set a real ADMIN_PASS before running."
+    exit 1
+fi
+# RPC_PASS and ADMIN_PASS get embedded both in defcoin.conf (INI: '#' starts
+# a comment, '=' ends the key) and in pool_configs/defcoin.json, config.json,
+# settings.json (JSON: '"' and '\' break out of the string literal). A
+# password containing any of those characters silently corrupts whichever
+# config it lands in rather than failing loudly, so reject them up front.
+for pw_name in RPC_PASS ADMIN_PASS; do
+    pw_val="${!pw_name}"
+    if [[ "$pw_val" == *'"'* || "$pw_val" == *'\'* || "$pw_val" == *'#'* || "$pw_val" == *'='* ]]; then
+        echo "ERROR: $pw_name contains a character (\" \\ # =) that breaks the INI/JSON config files it's embedded in. Use only alphanumerics and other punctuation."
+        exit 1
+    fi
+done
 
 # ── Parse flags ───────────────────────────────────────────────────────────────
 SKIP_NODE=false; SKIP_POOL=false; SKIP_EXPLORER=false; SKIP_NGINX=false
@@ -46,7 +62,7 @@ fi
 
 # Make sure the current user can write to /opt dirs (scripts chown them)
 export POOL_DIR EXPLORER_DIR DEFCOIN_DIR RPC_USER RPC_PASS \
-       POOL_WALLET_ADDRESS POOL_DOMAIN EXPLORER_DOMAIN CERTBOT_EMAIL
+       POOL_WALLET_ADDRESS POOL_DOMAIN EXPLORER_DOMAIN CERTBOT_EMAIL ADMIN_PASS
 
 # ── Phase 2: defcoin node ─────────────────────────────────────────────────────
 if [ "$SKIP_NODE" = false ]; then

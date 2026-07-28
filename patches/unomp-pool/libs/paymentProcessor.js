@@ -174,7 +174,7 @@ function SetupForPool(logger, poolOptions, setupFinished){
         var endRedisTimer = function(){ timeSpentRedis += Date.now() - startTimeRedis };
 
         var startRPCTimer = function(){ startTimeRPC = Date.now(); };
-        var endRPCTimer = function(){ timeSpentRPC += Date.now() - startTimeRedis };
+        var endRPCTimer = function(){ timeSpentRPC += Date.now() - startTimeRPC };
 
         async.waterfall([
 
@@ -463,11 +463,17 @@ function SetupForPool(logger, poolOptions, setupFinished){
                                 + ' has no resolvable payout address; redistributing '
                                 + satoshisToCoins(inv.owed) + ' accrued balance to ' + recipient.w);
 
+                            // Credit the absorbed amount into recipient.worker.reward,
+                            // not just the ephemeral recipient.owed used for this
+                            // cycle's sort/allocation math -- every deferral path below
+                            // (getbalance failure, sendmany failure, insufficient-funds
+                            // exhaustion) falls back to `worker.balanceChange =
+                            // worker.reward`, discarding anything that only lived in
+                            // `owed`. Folding it into `reward` means the recipient gets
+                            // properly credited no matter what happens to the payment
+                            // attempt this cycle, so it's safe to deduct the donor now.
+                            recipient.worker.reward += inv.owed;
                             recipient.owed += inv.owed;
-                            // the worker's full owed amount (balance *and* this round's
-                            // reward) moves to recipient.owed above -- nothing is
-                            // retained here, so unlike the general "reward minus amount
-                            // paid" case below, this worker's new balance is just 0.
                             worker.balanceChange = worker.balance * -1;
                             worker.sent = 0;
                         } else {
@@ -651,8 +657,8 @@ function SetupForPool(logger, poolOptions, setupFinished){
                     var workerShares = r.workerShares;
                     Object.keys(workerShares).forEach(function(worker){
                     orphanMergeCommands.push(['hincrby', coin + ':shares:roundCurrent',
-                        +worker, workerShares[worker]]);
-                        });  
+                        worker, workerShares[worker]]);
+                        });
                 };
 
                 rounds.forEach(function(r){
@@ -662,7 +668,6 @@ function SetupForPool(logger, poolOptions, setupFinished){
                 rounds.forEach(function(r){
                         switch(r.category){
                             case 'kicked':
-                                movePendingCommands.push(['smove', coin + ':blocksPending', coin + ':blocksOrphaned', r.serialized]);
                             case 'orphan':
                                 movePendingCommands.push(['smove', coin + ':blocksPending', coin + ':blocksOrphaned', r.serialized]);
                                 if (r.canDeleteShares){
