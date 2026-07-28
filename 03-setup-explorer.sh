@@ -42,6 +42,15 @@ npm install --production
 
 # ── settings.json ────────────────────────────────────────────────────────────
 # eIquidus ships with settings.json.template; we write our own directly.
+#
+# sync.batch_size is set to 1 (default is 5000): batch writes only flush to
+# the database once a full batch is accumulated, but defcoin-sync.service
+# restarts every cycle (Restart=always/RestartSec=30). Any run that processes
+# fewer than batch_size new blocks -- the normal case once caught up, since
+# blocks land every ~2 min -- exits and discards its in-memory batch before
+# ever flushing, so indexed data silently never gets written under steady-
+# state operation. A large batch_size only makes sense for a single
+# long-running initial sync, not this restart-per-cycle service.
 cat > "$EXPLORER_DIR/settings.json" <<EOF
 {
   "title": "Defcoin Explorer",
@@ -67,6 +76,9 @@ cat > "$EXPLORER_DIR/settings.json" <<EOF
   "check_timeout": 250,
   "block_parallel_tasks": 1,
   "use_rpc": true,
+  "sync": {
+    "batch_size": 1
+  },
   "explorer_url": "https://${EXPLORER_DOMAIN}",
   "display": {
     "api": true,

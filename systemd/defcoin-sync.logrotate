@@ -1,0 +1,9 @@
+/var/log/defcoin-sync.log {
+    daily
+    rotate 3
+    maxsize 500M
+    compress
+    missingok
+    notifempty
+    copytruncate
+}

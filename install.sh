@@ -83,6 +83,12 @@ for svc in defcoind defcoin-pool defcoin-explorer defcoin-sync; do
     sudo cp "$SCRIPT_DIR/systemd/${svc}.service" /etc/systemd/system/
 done
 
+# defcoin-sync logs one line per RPC call (see patches/apply-patches.sh for
+# why) -- routed to its own file instead of the journal, so it needs rotation.
+sudo touch /var/log/defcoin-sync.log
+sudo chown defcoin:defcoin /var/log/defcoin-sync.log
+sudo cp "$SCRIPT_DIR/systemd/defcoin-sync.logrotate" /etc/logrotate.d/defcoin-sync
+
 sudo systemctl daemon-reload
 sudo systemctl enable defcoind defcoin-pool defcoin-explorer defcoin-sync
 
