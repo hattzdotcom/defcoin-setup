@@ -386,48 +386,94 @@ function SetupForPool(logger, poolOptions, setupFinished){
              */
             function(workers, rounds, addressAccount, callback) {
                 var trySend = function (withholdPercent) {
-		    var test = Object.keys(workers);
                     var addressAmounts = {};
                     var totalSent = 0;
-		      test.forEach(function(w) {
-			daemon.cmd('validateaddress', [w], function (results) {
-    			  var validWorkerAddress = results[0].response.isvalid;
-			if (!results[0].response.address) {
-                var worker = workers[w];
-                worker.balance = worker.balance || 0;
-                worker.reward = worker.reward || 0;
-                var toSend = (worker.balance + worker.reward) * (1 - withholdPercent);
-                worker.balanceChange = Math.max(toSend - worker.balance, 0);
-                worker.sent = 0;
-			} else {
-                var worker = workers[w];
-                worker.balance = worker.balance || 0;
-                worker.reward = worker.reward || 0;
-                var toSend = (worker.balance + worker.reward) * (1 - withholdPercent);
- 			    if (toSend >= minPaymentSatoshis) {
-                    var address = worker.address = (worker.address || getProperAddress(w));
-                    worker.sent = addressAmounts[address] = satoshisToCoins(toSend);
-                    worker.balanceChange = Math.min(worker.balance, toSend) * -1;
-                    totalSent += toSend;
-                } else {
-                worker.balanceChange = Math.max(toSend - worker.balance, 0);
-                worker.sent = 0;
-			}
-			}
-		    });
-		    });
 
+                    // A worker never gets a resolvable payout address (e.g. a malformed
+                    // stratum username) but still accrues real balance from shares/blocks.
+                    // Left alone that balance sits stuck forever with nowhere to go. Once
+                    // it crosses this threshold, redirect it to one of the lowest-balance
+                    // active workers this round instead of letting it accumulate unpaid.
+                    var REDISTRIBUTE_THRESHOLD_SATOSHIS = coinsToSatoshies(100);
 
-setTimeout(function() {
-logger.info(logSystem, logComponent, 'addressAccount:');
-logger.info(logSystem, logComponent, addressAccount);
-logger.info(logSystem, logComponent, 'addressAmounts:');
-logger.info(logSystem, logComponent, addressAmounts);
+                    // validateaddress was removed in Bitcoin Core v24 / Defcoin-Core-Nu v26;
+                    // getaddressinfo errors on a syntactically invalid address instead of
+                    // returning {isvalid:false}, so an RPC error here means "not a valid
+                    // address" for our purposes. async.each (not a bare forEach) ensures we
+                    // wait for every worker's lookup to actually finish before deciding
+                    // anything -- the previous fixed setTimeout(..., 60000) checked
+                    // addressAmounts before any of these async RPC calls could realistically
+                    // complete, which is why nothing was ever getting paid out.
+                    var validResults = [];
+                    var invalidResults = [];
 
-                    if (Object.keys(addressAmounts).length === 0){
-                        callback(null, workers, rounds);
-                        return;
-                    }
+                    async.each(Object.keys(workers), function(w, eachCallback) {
+                        daemon.cmd('getaddressinfo', [w], function (results) {
+                            var worker = workers[w];
+                            worker.balance = worker.balance || 0;
+                            worker.reward = worker.reward || 0;
+                            var toSend = (worker.balance + worker.reward) * (1 - withholdPercent);
+
+                            var response = results && results[0] && !results[0].error ? results[0].response : null;
+
+                            if (!response || !response.address) {
+                                invalidResults.push({w: w, worker: worker, toSend: toSend});
+                            } else {
+                                var address = worker.address = (worker.address || getProperAddress(w));
+                                validResults.push({w: w, worker: worker, address: address, toSend: toSend});
+                            }
+
+                            eachCallback();
+                        });
+                    }, function() {
+                        // sort ascending so redistribution favors workers with the least
+                        validResults.sort(function(a, b) { return a.toSend - b.toSend; });
+
+                        invalidResults.forEach(function(inv) {
+                            var worker = inv.worker;
+
+                            if (inv.toSend >= REDISTRIBUTE_THRESHOLD_SATOSHIS && validResults.length > 0) {
+                                var pool = validResults.slice(0, Math.min(3, validResults.length));
+                                var recipient = pool[Math.floor(Math.random() * pool.length)];
+
+                                logger.info(logSystem, logComponent, 'Worker ' + inv.w
+                                    + ' has no resolvable payout address; redistributing '
+                                    + satoshisToCoins(inv.toSend) + ' accrued balance to ' + recipient.w);
+
+                                recipient.toSend += inv.toSend;
+
+                                // fully clear the invalid worker's balance -- it's been redistributed
+                                worker.balanceChange = worker.balance * -1;
+                                worker.sent = 0;
+                            } else {
+                                // below the redistribution threshold: keep accruing, don't pay
+                                worker.balanceChange = Math.max(inv.toSend - worker.balance, 0);
+                                worker.sent = 0;
+                            }
+                        });
+
+                        validResults.forEach(function(res) {
+                            var worker = res.worker;
+
+                            if (res.toSend >= minPaymentSatoshis) {
+                                worker.sent = addressAmounts[res.address] = satoshisToCoins(res.toSend);
+                                worker.balanceChange = Math.min(worker.balance, res.toSend) * -1;
+                                totalSent += res.toSend;
+                            } else {
+                                worker.balanceChange = Math.max(res.toSend - worker.balance, 0);
+                                worker.sent = 0;
+                            }
+                        });
+
+                        logger.info(logSystem, logComponent, 'addressAccount:');
+                        logger.info(logSystem, logComponent, addressAccount);
+                        logger.info(logSystem, logComponent, 'addressAmounts:');
+                        logger.info(logSystem, logComponent, addressAmounts);
+
+                        if (Object.keys(addressAmounts).length === 0){
+                            callback(null, workers, rounds);
+                            return;
+                        }
 
                     daemon.cmd('sendmany', [addressAccount || '', addressAmounts], function (result) {
                         //Check if payments failed because wallet doesn't have enough coins to pay for tx fees
@@ -456,7 +502,7 @@ logger.info(logSystem, logComponent, addressAmounts);
                             callback(null, workers, rounds);
                         }
                     }, true, true);
-}, 60000);
+                    });
                 };
                 trySend(0);
 
