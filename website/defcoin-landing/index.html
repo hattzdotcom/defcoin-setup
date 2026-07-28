@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Defcoin (DFC)</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css">
+  <style>
+    body { background: #1a1a2e; color: #e0e0e0; font-family: 'Segoe UI', sans-serif; }
+    .hero { padding: 80px 0 60px; text-align: center; }
+    .hero h1 { font-size: 3rem; font-weight: 700; color: #fff; }
+    .hero .ticker { font-size: 1.4rem; color: #6c9dc6; font-weight: 600; }
+    .hero p { font-size: 1.1rem; color: #aaa; max-width: 600px; margin: 20px auto 0; }
+    .card { background: #16213e; border: 1px solid #0f3460; border-radius: 12px; }
+    .card-title { color: #6c9dc6; font-weight: 700; font-size: 1.2rem; }
+    .btn-primary { background: #0f3460; border-color: #0f3460; }
+    .btn-primary:hover { background: #1a5276; border-color: #1a5276; }
+    .btn-outline-secondary { color: #aaa; border-color: #555; }
+    .btn-outline-secondary:hover { background: #333; color: #fff; border-color: #777; }
+    .stat-label { color: #888; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    .stat-value { color: #fff; font-size: 1.1rem; font-weight: 600; }
+    .section-divider { border-color: #0f3460; margin: 40px 0; }
+    footer { color: #555; font-size: 0.85rem; padding: 30px 0; text-align: center; }
+    footer a { color: #6c9dc6; text-decoration: none; }
+    .code-block { background: #0d1b2a; border: 1px solid #0f3460; border-radius: 6px; padding: 12px 16px; font-family: monospace; font-size: 0.9rem; color: #7fc8f8; }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <div class="hero">
+    <div class="ticker">DFC</div>
+    <h1>Defcoin</h1>
+    <p>A scrypt proof-of-work cryptocurrency &mdash; Litecoin fork with 2-minute blocks and ~84 million total coins.</p>
+    <p class="mt-2" style="font-size:0.95rem; color:#888;">This node sponsored by <strong style="color:#6c9dc6">DC206</strong> and <a href="https://blacklodgeresearch.org" target="_blank" rel="noopener" style="color:#6c9dc6">Black Lodge Research</a>.</p>
+  </div>
+
+  <div class="row g-4 mb-5">
+    <div class="col-md-4">
+      <div class="card h-100 p-4 text-center">
+        <div class="card-title mb-2">Mining Pool</div>
+        <p class="text-muted small mb-4">Mine DFC with any scrypt miner. 0% fee, 0.5 DFC minimum payout. VarDiff stratum.</p>
+        <a href="https://pool.defcoin.fun" class="btn btn-primary">pool.defcoin.fun</a>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card h-100 p-4 text-center">
+        <div class="card-title mb-2">Block Explorer</div>
+        <p class="text-muted small mb-4">Browse blocks, transactions, and addresses on the Defcoin blockchain.</p>
+        <a href="https://explorer.defcoin.fun" class="btn btn-primary">explorer.defcoin.fun</a>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card h-100 p-4 text-center">
+        <div class="card-title mb-2">DC903 Community</div>
+        <p class="text-muted small mb-4">Additional pool, explorer, and community resources maintained by DC903.</p>
+        <a href="https://defcoin.dc903.org" class="btn btn-outline-secondary" target="_blank" rel="noopener">defcoin.dc903.org</a>
+      </div>
+    </div>
+  </div>
+
+  <hr class="section-divider">
+
+  <div class="row g-4 mb-5">
+    <div class="col-md-6">
+      <h5 class="mb-3" style="color:#6c9dc6">Network Stats</h5>
+      <div class="row g-3">
+        <div class="col-6"><div class="stat-label">Algorithm</div><div class="stat-value">Scrypt</div></div>
+        <div class="col-6"><div class="stat-label">Block Time</div><div class="stat-value">2 minutes</div></div>
+        <div class="col-6"><div class="stat-label">Total Supply</div><div class="stat-value">~84M DFC</div></div>
+        <div class="col-6"><div class="stat-label">P2P Port</div><div class="stat-value">1337</div></div>
+        <div class="col-6"><div class="stat-label">RPC Port</div><div class="stat-value">17332</div></div>
+        <div class="col-6"><div class="stat-label">Address Prefix</div><div class="stat-value">D</div></div>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <h5 class="mb-3" style="color:#6c9dc6">Start Mining</h5>
+      <p class="text-muted small mb-2">Connect any scrypt miner to our pool:</p>
+      <div class="code-block mb-2">stratum+tcp://pool.defcoin.fun:3333</div>
+      <p class="text-muted small mb-2">Username: your DFC address &nbsp;&bull;&nbsp; Password: x</p>
+      <div class="code-block">minerd -a scrypt -o stratum+tcp://pool.defcoin.fun:3333 \<br>&nbsp; -u YOUR_DFC_ADDRESS -p x</div>
+    </div>
+  </div>
+
+  <hr class="section-divider">
+
+  <div class="row g-4 mb-5">
+    <div class="col-md-6">
+      <h5 class="mb-3" style="color:#6c9dc6">Resources</h5>
+      <ul class="list-unstyled">
+        <li class="mb-2"><a href="https://github.com/defcoincore/Defcoin-Core-Nu" target="_blank" rel="noopener">Defcoin Core Nu (GitHub)</a></li>
+        <li class="mb-2"><a href="https://github.com/hattzdotcom/defcoin-setup" target="_blank" rel="noopener">Pool/Explorer setup scripts (GitHub)</a></li>
+        <li class="mb-2"><a href="https://defcoin.dc903.org" target="_blank" rel="noopener">DC903 community site</a></li>
+      </ul>
+    </div>
+    <div class="col-md-6">
+      <h5 class="mb-3" style="color:#6c9dc6">Run a Node</h5>
+      <p class="text-muted small">Help strengthen the network by running a full node. Add these peers to your <code>defcoin.conf</code>:</p>
+      <div class="code-block" style="font-size:0.8rem">
+        addnode=pool.defcoin.fun:1337<br>
+        addnode=seed.fuckyyourcoins.com:1337<br>
+        addnode=defcoin.dc903.org:1337
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer>
+  <div class="container">
+    Defcoin (DFC) &mdash; can't even buy a beer with it &mdash;
+    <a href="https://pool.defcoin.fun">Pool</a> &bull;
+    <a href="https://explorer.defcoin.fun">Explorer</a> &bull;
+    <a href="https://defcoin.dc903.org">DC903</a>
+  </div>
+</footer>
+
+</body>
+</html>

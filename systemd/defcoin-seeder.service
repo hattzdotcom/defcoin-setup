@@ -1,0 +1,23 @@
+[Unit]
+Description=Defcoin DNS Seeder
+After=network.target
+
+[Service]
+User=defcoin
+WorkingDirectory=/home/defcoin/defcoin-seeder
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+# -s takes a hostname re-resolved every 30 minutes by the seeder's own
+# ThreadSeeder loop (see main.cpp) -- bootstrap.fuckyyourcoins.com is kept
+# in sync with the peer addresses our own main + relay nodes know about by
+# scripts/update-seed-bootstrap-dns.py (see defcoin-seed-bootstrap.timer),
+# so new peers get picked up automatically without ever touching this
+# service again. The crawler's own GETADDR-based discovery mostly doesn't
+# work against modern, privacy-hardened Bitcoin-Core-derived nodes -- see
+# commit history for the investigation.
+ExecStart=/home/defcoin/defcoin-seeder/dnsseed -h seed.fuckyyourcoins.com -n ns1seed.fuckyyourcoins.com -m admin.fuckyyourcoins.com --magic defc014e --p2port 1337 -s bootstrap.fuckyyourcoins.com
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target

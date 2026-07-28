@@ -1,0 +1,12 @@
+[Unit]
+Description=Refresh bootstrap.fuckyyourcoins.com DNS records from our own nodes' known peers
+After=network.target
+
+[Service]
+Type=oneshot
+User=defcoin
+Group=defcoin
+WorkingDirectory=/home/defcoin
+ExecStart=/usr/bin/python3 /home/defcoin/scripts/update-seed-bootstrap-dns.py --apply
+StandardOutput=append:/var/log/defcoin-seed-bootstrap.log
+StandardError=append:/var/log/defcoin-seed-bootstrap.log
