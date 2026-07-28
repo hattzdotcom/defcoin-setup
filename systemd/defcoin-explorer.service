@@ -8,6 +8,7 @@ Type=simple
 User=defcoin
 Group=defcoin
 WorkingDirectory=/opt/defcoin-explorer
+Environment="NODE_OPTIONS=--experimental-global-webcrypto --require /opt/defcoin-explorer/scripts/webcrypto-shim.js"
 ExecStart=/usr/bin/node /opt/defcoin-explorer/bin/cluster
 Restart=on-failure
 RestartSec=15

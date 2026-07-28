@@ -8,11 +8,14 @@ Type=simple
 User=defcoin
 Group=defcoin
 WorkingDirectory=/opt/defcoin-explorer
+Environment="NODE_OPTIONS=--experimental-global-webcrypto --require /opt/defcoin-explorer/scripts/webcrypto-shim.js"
 ExecStart=/usr/bin/node /opt/defcoin-explorer/scripts/sync.js index update
 Restart=always
 RestartSec=30
-StandardOutput=journal
-StandardError=journal
+# Routed to a file, not the journal: lib/node.js's fix logs one line per RPC
+# call (can be millions during a full resync). See patches/apply-patches.sh.
+StandardOutput=append:/var/log/defcoin-sync.log
+StandardError=append:/var/log/defcoin-sync.log
 
 [Install]
 WantedBy=multi-user.target
