@@ -1,0 +1,9 @@
+/var/log/defcoin-reconcile.log {
+    weekly
+    rotate 8
+    maxsize 100M
+    compress
+    missingok
+    notifempty
+    copytruncate
+}

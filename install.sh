@@ -89,8 +89,21 @@ sudo touch /var/log/defcoin-sync.log
 sudo chown defcoin:defcoin /var/log/defcoin-sync.log
 sudo cp "$SCRIPT_DIR/systemd/defcoin-sync.logrotate" /etc/logrotate.d/defcoin-sync
 
+# defcoin-reconcile re-verifies blocksConfirmed against the live chain on a
+# schedule (a "confirmed" round is never rechecked otherwise, so a
+# deep-enough reorg can leave a phantom reward credited forever). oneshot +
+# timer, not a long-running service.
+sudo cp "$SCRIPT_DIR/systemd/defcoin-reconcile.service" /etc/systemd/system/
+sudo cp "$SCRIPT_DIR/systemd/defcoin-reconcile.timer" /etc/systemd/system/
+sudo mkdir -p /home/defcoin/scripts
+sudo cp "$SCRIPT_DIR/scripts/reconcile-blocksConfirmed.py" /home/defcoin/scripts/
+sudo chown defcoin:defcoin /home/defcoin/scripts/reconcile-blocksConfirmed.py
+sudo touch /var/log/defcoin-reconcile.log
+sudo chown defcoin:defcoin /var/log/defcoin-reconcile.log
+sudo cp "$SCRIPT_DIR/systemd/defcoin-reconcile.logrotate" /etc/logrotate.d/defcoin-reconcile
+
 sudo systemctl daemon-reload
-sudo systemctl enable defcoind defcoin-pool defcoin-explorer defcoin-sync
+sudo systemctl enable defcoind defcoin-pool defcoin-explorer defcoin-sync defcoin-reconcile.timer
 
 echo ""
 echo "========================================================"
@@ -105,11 +118,13 @@ echo ""
 echo "Once synced (blocks = network height), start everything:"
 echo ""
 echo "  sudo systemctl start defcoin-pool defcoin-explorer defcoin-sync"
+echo "  sudo systemctl start defcoin-reconcile.timer"
 echo ""
 echo "Check logs:"
 echo "  journalctl -u defcoind -f"
 echo "  journalctl -u defcoin-pool -f"
 echo "  journalctl -u defcoin-explorer -f"
+echo "  tail -f /var/log/defcoin-reconcile.log"
 echo ""
 echo "CRITICAL: If 'defcoin-cli -datadir=/var/lib/defcoin getpeerinfo' returns []"
 echo "after a few minutes, the DNS seeders are dead. Get live peer IPs from"
