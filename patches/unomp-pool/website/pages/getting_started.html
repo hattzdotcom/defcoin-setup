@@ -1,0 +1,52 @@
+<div class="row">
+	<article class="col-xs-12">
+		<div class="jarviswidget jarviswidget-color-blueDark" id="wid-id-0" data-widget-editbutton="false">
+			<header>
+				<span class="widget-icon"><i class="fa fa-rocket"></i></span>
+				<h2>Getting Started &mdash; Mining Defcoin</h2>
+			</header>
+			<div>
+				<div class="widget-body" style="padding:20px;">
+
+					<h3>Pool Connection</h3>
+					<table class="table table-bordered">
+						<thead><tr><th>Coin</th><th>Algorithm</th><th>Stratum URL</th><th>Port</th><th>Difficulty</th></tr></thead>
+						<tbody><tr>
+							<td>Defcoin (DFC)</td>
+							<td>Scrypt</td>
+							<td><code>stratum+tcp://pool.defcoin.fun</code></td>
+							<td>3333</td>
+							<td>VarDiff 8&ndash;512 (start 64)</td>
+						</tr></tbody>
+					</table>
+
+					<h3 style="margin-top:20px;">Quick Start</h3>
+					<p>Use any Scrypt-compatible miner. Set your <strong>Defcoin wallet address</strong> as the username and any string (e.g. <code>x</code>) as the password.</p>
+
+					<h4>cpuminer &mdash; CPU mining</h4>
+					<pre style="background:#1a1a1a;color:#ddd;padding:12px;border-radius:4px;">minerd -a scrypt -o stratum+tcp://pool.defcoin.fun:3333 -u YOUR_DFC_ADDRESS -p x</pre>
+					<p>Download: <a href="https://github.com/pooler/cpuminer/releases" target="_blank">pooler/cpuminer</a></p>
+
+					<h4 style="margin-top:16px;">cgminer / bfgminer &mdash; ASIC / FPGA</h4>
+					<pre style="background:#1a1a1a;color:#ddd;padding:12px;border-radius:4px;">cgminer -o stratum+tcp://pool.defcoin.fun:3333 -u YOUR_DFC_ADDRESS -p x --scrypt</pre>
+
+					<h4 style="margin-top:16px;">SGminer &mdash; GPU</h4>
+					<pre style="background:#1a1a1a;color:#ddd;padding:12px;border-radius:4px;">sgminer -k scrypt -o stratum+tcp://pool.defcoin.fun:3333 -u YOUR_DFC_ADDRESS -p x</pre>
+
+					<h3 style="margin-top:24px;">Get a Defcoin Wallet</h3>
+					<p>Download <strong>Defcoin Core</strong> from <a href="https://github.com/defcoincore/Defcoin-Core-Nu/releases" target="_blank">github.com/defcoincore/Defcoin-Core-Nu</a>. Defcoin addresses start with the letter <strong>D</strong>.</p>
+
+					<h3 style="margin-top:24px;">Notes</h3>
+					<ul>
+						<li><strong>Variable difficulty</strong> &mdash; the pool auto-adjusts your difficulty to match your hashrate (min 8, max 512).</li>
+						<li><strong>Pool fee:</strong> 0% &mdash; the full block reward goes to miners.</li>
+						<li><strong>Network fee:</strong> up to ~0.1 DFC may be reserved from each payout batch to cover the Defcoin blockchain's own transaction fee for sending your payment &mdash; this goes to the network, not the pool.</li>
+						<li><strong>Minimum payout:</strong> 0.5 DFC, paid automatically every 30 seconds if your matured balance meets the minimum. Large balances may be paid out in installments as funds mature.</li>
+						<li>Block explorer: <a href="https://explorer.defcoin.fun" target="_blank">explorer.defcoin.fun</a></li>
+					</ul>
+
+				</div>
+			</div>
+		</div>
+	</article>
+</div>

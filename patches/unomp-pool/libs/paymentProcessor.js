@@ -385,172 +385,232 @@ function SetupForPool(logger, poolOptions, setupFinished){
              if not sending the balance, the differnce should be +(the amount they earned this round)
              */
             function(workers, rounds, addressAccount, callback) {
-                var MAX_RETRIES = 5;
+                // A worker never gets a resolvable payout address (e.g. a malformed
+                // stratum username) but still accrues real balance from shares/blocks.
+                // Left alone that balance sits stuck forever with nowhere to go. Once
+                // it crosses this threshold, redirect it to one of the lowest-balance
+                // active workers this round instead of letting it accumulate unpaid.
+                var REDISTRIBUTE_THRESHOLD_SATOSHIS = coinsToSatoshies(100);
 
-                var trySend = function (withholdPercent, retryCount) {
-                    retryCount = retryCount || 0;
+                // Reserved off the top of spendable funds so sendmany's actual network
+                // (gas) fee never itself triggers an insufficient-funds error. 0.1 DFC
+                // baseline -- doubles on retry if that's still not enough (see
+                // attempt() below). Advertised to miners up front on the pool website
+                // (website/pages/getting_started.html and index page, "Network fee" note)
+                // -- keep that number in sync with this constant.
+                var FEE_RESERVE_SATOSHIS = coinsToSatoshies(0.1);
 
-                    var addressAmounts = {};
-                    var totalSent = 0;
-                    // workers we'd LIKE to pay this cycle -- balanceChange for these is
-                    // deliberately not set until we know whether sendmany actually
-                    // succeeded. Setting it upfront (the original bug) meant a failed or
-                    // deferred send could still get "deducted" as if it had gone out,
-                    // silently drifting the balance away from what's actually payable.
-                    var pendingPayable = [];
+                // Any single worker with a large outstanding balance (e.g. the pool's
+                // own leftover balance sitting mostly immature) must never be able to
+                // block everyone else's payout. So: apply this round's reward to every
+                // worker's balance unconditionally, then pay out however much of that
+                // is actually covered by *currently spendable* funds, smallest balances
+                // first, up to as many workers as the spendable funds stretch to. A
+                // worker whose balance can only be partially covered still gets that
+                // partial amount -- the remainder simply waits for a later cycle
+                // instead of the whole payout stalling until the full balance clears.
+                // balanceChange for every worker is always (reward - amountPaidOut):
+                // if amountPaidOut is 0 that's just "credit the reward, don't pay";
+                // if it's the worker's full owed balance that reduces to the old
+                // "-balance" (fully paid, balance zeroed); anything in between is a
+                // partial payment and the formula still nets out correctly.
 
-                    // A worker never gets a resolvable payout address (e.g. a malformed
-                    // stratum username) but still accrues real balance from shares/blocks.
-                    // Left alone that balance sits stuck forever with nowhere to go. Once
-                    // it crosses this threshold, redirect it to one of the lowest-balance
-                    // active workers this round instead of letting it accumulate unpaid.
-                    var REDISTRIBUTE_THRESHOLD_SATOSHIS = coinsToSatoshies(100);
+                // validateaddress was removed in Bitcoin Core v24 / Defcoin-Core-Nu v26;
+                // getaddressinfo errors on a syntactically invalid address instead of
+                // returning {isvalid:false}, so an RPC error here means "not a valid
+                // address" for our purposes. async.each (not a bare forEach) ensures we
+                // wait for every worker's lookup to actually finish before deciding
+                // anything -- the previous fixed setTimeout(..., 60000) checked
+                // addressAmounts before any of these async RPC calls could realistically
+                // complete, which is why nothing was ever getting paid out.
+                var validResults = [];
+                var invalidResults = [];
 
-                    // validateaddress was removed in Bitcoin Core v24 / Defcoin-Core-Nu v26;
-                    // getaddressinfo errors on a syntactically invalid address instead of
-                    // returning {isvalid:false}, so an RPC error here means "not a valid
-                    // address" for our purposes. async.each (not a bare forEach) ensures we
-                    // wait for every worker's lookup to actually finish before deciding
-                    // anything -- the previous fixed setTimeout(..., 60000) checked
-                    // addressAmounts before any of these async RPC calls could realistically
-                    // complete, which is why nothing was ever getting paid out.
-                    var validResults = [];
-                    var invalidResults = [];
+                async.each(Object.keys(workers), function(w, eachCallback) {
+                    // worker keys are "address.workername" (e.g. mining username);
+                    // getaddressinfo needs the bare address or it errors -5 Invalid
+                    // address on every single lookup, regardless of how valid the
+                    // underlying address actually is.
+                    var lookupAddress = getProperAddress(w);
+                    daemon.cmd('getaddressinfo', [lookupAddress], function (results) {
+                        var worker = workers[w];
+                        worker.balance = worker.balance || 0;
+                        worker.reward = worker.reward || 0;
+                        var owed = worker.balance + worker.reward;
 
-                    async.each(Object.keys(workers), function(w, eachCallback) {
-                        // worker keys are "address.workername" (e.g. mining username);
-                        // getaddressinfo needs the bare address or it errors -5 Invalid
-                        // address on every single lookup, regardless of how valid the
-                        // underlying address actually is.
-                        var lookupAddress = getProperAddress(w);
-                        daemon.cmd('getaddressinfo', [lookupAddress], function (results) {
-                            var worker = workers[w];
-                            worker.balance = worker.balance || 0;
-                            worker.reward = worker.reward || 0;
-                            var toSend = (worker.balance + worker.reward) * (1 - withholdPercent);
+                        var response = results && results[0] && !results[0].error ? results[0].response : null;
 
-                            var response = results && results[0] && !results[0].error ? results[0].response : null;
-
-                            if (!response || !response.address) {
-                                invalidResults.push({w: w, worker: worker, toSend: toSend});
-                            } else {
-                                var address = worker.address = (worker.address || lookupAddress);
-                                validResults.push({w: w, worker: worker, address: address, toSend: toSend});
-                            }
-
-                            eachCallback();
-                        });
-                    }, function() {
-                        // sort ascending so redistribution favors workers with the least
-                        validResults.sort(function(a, b) { return a.toSend - b.toSend; });
-
-                        invalidResults.forEach(function(inv) {
-                            var worker = inv.worker;
-
-                            if (inv.toSend >= REDISTRIBUTE_THRESHOLD_SATOSHIS && validResults.length > 0) {
-                                var pool = validResults.slice(0, Math.min(3, validResults.length));
-                                var recipient = pool[Math.floor(Math.random() * pool.length)];
-
-                                logger.info(logSystem, logComponent, 'Worker ' + inv.w
-                                    + ' has no resolvable payout address; redistributing '
-                                    + satoshisToCoins(inv.toSend) + ' accrued balance to ' + recipient.w);
-
-                                recipient.toSend += inv.toSend;
-
-                                // this is internal bookkeeping (moving an unpayable balance
-                                // onto a payable worker), not a claim that money moved --
-                                // safe to apply regardless of this cycle's send outcome.
-                                worker.balanceChange = worker.balance * -1;
-                                worker.sent = 0;
-                            } else {
-                                // below the redistribution threshold: keep accruing, don't pay
-                                worker.balanceChange = Math.max(inv.toSend - worker.balance, 0);
-                                worker.sent = 0;
-                            }
-                        });
-
-                        validResults.forEach(function(res) {
-                            if (res.toSend >= minPaymentSatoshis) {
-                                // multiple worker keys (e.g. "addr.rig1", "addr.rig2")
-                                // can resolve to the same underlying address -- sum into
-                                // addressAmounts rather than overwrite, since sendmany
-                                // takes one amount per address, not per worker.
-                                pendingPayable.push(res);
-                                addressAmounts[res.address] = (addressAmounts[res.address] || 0) + satoshisToCoins(res.toSend);
-                                totalSent += res.toSend;
-                            } else {
-                                var worker = res.worker;
-                                worker.balanceChange = Math.max(res.toSend - worker.balance, 0);
-                                worker.sent = 0;
-                            }
-                        });
-
-                        logger.info(logSystem, logComponent, 'addressAccount:');
-                        logger.info(logSystem, logComponent, addressAccount);
-                        logger.info(logSystem, logComponent, 'addressAmounts:');
-                        logger.info(logSystem, logComponent, addressAmounts);
-
-                        if (Object.keys(addressAmounts).length === 0){
-                            callback(null, workers, rounds);
-                            return;
+                        if (!response || !response.address) {
+                            invalidResults.push({w: w, worker: worker, owed: owed});
+                        } else {
+                            var address = worker.address = (worker.address || lookupAddress);
+                            validResults.push({w: w, worker: worker, address: address, owed: owed});
                         }
 
-                        // nothing paid this cycle -- every pending-payable worker just keeps
-                        // accruing (same treatment as "below minimum"), so a failed/deferred
-                        // send never gets treated as if it went out.
-                        var deferPendingPayable = function() {
-                            pendingPayable.forEach(function(res) {
+                        eachCallback();
+                    });
+                }, function() {
+                    invalidResults.forEach(function(inv) {
+                        var worker = inv.worker;
+
+                        if (inv.owed >= REDISTRIBUTE_THRESHOLD_SATOSHIS && validResults.length > 0) {
+                            var pool = validResults.slice(0, Math.min(3, validResults.length));
+                            var recipient = pool[Math.floor(Math.random() * pool.length)];
+
+                            logger.info(logSystem, logComponent, 'Worker ' + inv.w
+                                + ' has no resolvable payout address; redistributing '
+                                + satoshisToCoins(inv.owed) + ' accrued balance to ' + recipient.w);
+
+                            recipient.owed += inv.owed;
+                            // the worker's full owed amount (balance *and* this round's
+                            // reward) moves to recipient.owed above -- nothing is
+                            // retained here, so unlike the general "reward minus amount
+                            // paid" case below, this worker's new balance is just 0.
+                            worker.balanceChange = worker.balance * -1;
+                            worker.sent = 0;
+                        } else {
+                            // below the redistribution threshold: keep accruing, don't pay
+                            worker.balanceChange = worker.reward;
+                            worker.sent = 0;
+                        }
+                    });
+
+                    // ascending so smaller, easily-affordable balances get first claim
+                    // on this cycle's spendable funds -- picked *after* redistribution
+                    // so a worker that just absorbed someone else's balance sorts by
+                    // its true, final owed amount.
+                    validResults.sort(function(a, b) { return a.owed - b.owed; });
+
+                    daemon.cmd('getbalance', [], function (balResult) {
+                        var deferAllValid = function() {
+                            validResults.forEach(function(res) {
                                 var worker = res.worker;
-                                worker.balanceChange = Math.max(res.toSend - worker.balance, 0);
+                                worker.balanceChange = worker.reward;
                                 worker.sent = 0;
                             });
                         };
 
-                    daemon.cmd('sendmany', [addressAccount || '', addressAmounts], function (result) {
-                        //Check if payments failed because wallet doesn't have enough coins to pay for tx fees
-                        if (result.error && result.error.code === -6) {
-                            if (retryCount >= MAX_RETRIES) {
-                                // a shortfall this large usually isn't a fee-rounding issue,
-                                // it's real (e.g. a chunk of the balance is still immature) --
-                                // give up cleanly rather than escalating withholding forever.
-                                logger.error(logSystem, logComponent, 'Insufficient spendable funds after '
-                                    + MAX_RETRIES + ' attempts -- deferring all pending payouts to next cycle, nothing deducted');
-                                deferPendingPayable();
+                        var spendableCoins;
+                        try {
+                            spendableCoins = JSON.parse(balResult.data).result;
+                        } catch (e) {
+                            spendableCoins = null;
+                        }
+
+                        if (balResult.error || spendableCoins === null) {
+                            logger.error(logSystem, logComponent, 'Could not fetch spendable balance for payout allocation: '
+                                + JSON.stringify(balResult.error || 'unparseable response') + ' -- deferring to next cycle, nothing deducted');
+                            deferAllValid();
+                            callback(null, workers, rounds);
+                            return;
+                        }
+
+                        var spendableSatoshis = coinsToSatoshies(spendableCoins);
+                        var MAX_RETRIES = 5;
+
+                        // A batch built from *reported* spendable balance can still hit
+                        // -6 Insufficient funds: this wallet holds many small coinbase
+                        // UTXOs, and funding a large send can require enough of them
+                        // that the real network fee comes out well above our flat
+                        // reserve estimate. Each retry doubles the reserve and rebuilds
+                        // the allocation from scratch -- since it's still smallest-owed
+                        // first, that reservation growth only ever eats into the
+                        // largest payee's amount, never bumps a smaller, already-cheap
+                        // payout back out of the batch.
+                        var attempt = function(retryCount) {
+                            var feeReserve = FEE_RESERVE_SATOSHIS * Math.pow(2, retryCount);
+                            var remaining = spendableSatoshis - feeReserve;
+                            var addressAmounts = {};
+                            var pendingPayable = [];
+                            var totalSent = 0;
+
+                            validResults.forEach(function(res) {
+                                var worker = res.worker;
+
+                                if (res.owed < minPaymentSatoshis) {
+                                    worker.balanceChange = worker.reward;
+                                    worker.sent = 0;
+                                    return;
+                                }
+
+                                var amountToPay = Math.min(res.owed, Math.max(remaining, 0));
+
+                                if (amountToPay < minPaymentSatoshis) {
+                                    // not enough spendable left this cycle to make a
+                                    // meaningful payment -- wait for a later cycle
+                                    worker.balanceChange = worker.reward;
+                                    worker.sent = 0;
+                                    return;
+                                }
+
+                                pendingPayable.push({w: res.w, worker: worker, amountToPay: amountToPay});
+                                // multiple worker keys (e.g. "addr.rig1", "addr.rig2") can
+                                // resolve to the same underlying address -- sum into
+                                // addressAmounts rather than overwrite, since sendmany
+                                // takes one amount per address, not per worker.
+                                addressAmounts[res.address] = (addressAmounts[res.address] || 0) + satoshisToCoins(amountToPay);
+                                totalSent += amountToPay;
+                                remaining -= amountToPay;
+                            });
+
+                            logger.info(logSystem, logComponent, 'addressAccount:');
+                            logger.info(logSystem, logComponent, addressAccount);
+                            logger.info(logSystem, logComponent, 'addressAmounts:');
+                            logger.info(logSystem, logComponent, addressAmounts);
+
+                            if (Object.keys(addressAmounts).length === 0){
                                 callback(null, workers, rounds);
                                 return;
                             }
-                            var higherPercent = withholdPercent + 0.01;
-                            logger.error(logSystem, logComponent, 'Not enough funds to cover the tx fees for sending out payments, decreasing rewards by '
-                                + (higherPercent * 100) + '% and retrying (' + (retryCount + 1) + '/' + MAX_RETRIES + ')');
-                            trySend(higherPercent, retryCount + 1);
-                        }
-                        else if (result.error) {
-                            logger.error(logSystem, logComponent, 'Error trying to send payments with RPC sendmany '
-                                + JSON.stringify(result.error) + ' -- deferring to next cycle, nothing deducted');
-                            deferPendingPayable();
-                            callback(null, workers, rounds);
-                        }
-                        else {
-                            logger.info(logSystem, logComponent, 'Sent out a total of ' + (totalSent / magnitude)
-                                + ' to ' + Object.keys(addressAmounts).length + ' workers');
-                            if (withholdPercent > 0) {
-                                logger.error(logSystem, logComponent, 'Had to withhold ' + (withholdPercent * 100)
-                                    + '% of reward from miners to cover transaction fees. '
-                                    + 'Fund pool wallet with coins to prevent this from happening');
-                            }
-                            // payment genuinely succeeded -- only now is it safe to deduct
-                            pendingPayable.forEach(function(res) {
-                                var worker = res.worker;
-                                worker.sent = satoshisToCoins(res.toSend);
-                                worker.balanceChange = Math.min(worker.balance, res.toSend) * -1;
-                            });
-                            callback(null, workers, rounds);
-                        }
-                    }, true, true);
-                    });
-                };
-                trySend(0, 0);
 
+                            // nothing paid this cycle -- every pending-payable worker just
+                            // keeps accruing (same treatment as "below minimum"), so a
+                            // failed/deferred send never gets treated as if it went out.
+                            var deferPendingPayable = function() {
+                                pendingPayable.forEach(function(res) {
+                                    var worker = res.worker;
+                                    worker.balanceChange = worker.reward;
+                                    worker.sent = 0;
+                                });
+                            };
+
+                            daemon.cmd('sendmany', [addressAccount || '', addressAmounts], function (result) {
+                                if (result.error && result.error.code === -6) {
+                                    if (retryCount >= MAX_RETRIES) {
+                                        logger.error(logSystem, logComponent, 'Insufficient spendable funds after '
+                                            + MAX_RETRIES + ' attempts even after growing the fee reserve -- deferring to next cycle, nothing deducted');
+                                        deferPendingPayable();
+                                        callback(null, workers, rounds);
+                                        return;
+                                    }
+                                    logger.error(logSystem, logComponent, 'Not enough funds to cover the tx fee, growing fee reserve to '
+                                        + satoshisToCoins(feeReserve * 2) + ' DFC and retrying (' + (retryCount + 1) + '/' + MAX_RETRIES + ')');
+                                    attempt(retryCount + 1);
+                                    return;
+                                }
+                                else if (result.error) {
+                                    logger.error(logSystem, logComponent, 'Error trying to send payments with RPC sendmany '
+                                        + JSON.stringify(result.error) + ' -- deferring to next cycle, nothing deducted');
+                                    deferPendingPayable();
+                                    callback(null, workers, rounds);
+                                    return;
+                                }
+
+                                logger.info(logSystem, logComponent, 'Sent out a total of ' + satoshisToCoins(totalSent)
+                                    + ' to ' + Object.keys(addressAmounts).length + ' address(es), ' + pendingPayable.length + ' worker(s)');
+
+                                // payment genuinely succeeded -- only now is it safe to deduct
+                                pendingPayable.forEach(function(res) {
+                                    var worker = res.worker;
+                                    worker.sent = satoshisToCoins(res.amountToPay);
+                                    worker.balanceChange = worker.reward - res.amountToPay;
+                                });
+                                callback(null, workers, rounds);
+                            }, true, true);
+                        };
+                        attempt(0);
+                    }, true, true);
+                });
             },
             function(workers, rounds, callback){
 
