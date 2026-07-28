@@ -1,0 +1,24 @@
+[Unit]
+Description=Defcoin DNS Seeder
+After=network.target
+
+[Service]
+User=defcoin
+WorkingDirectory=/home/defcoin/defcoin-seeder
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+# The upstream sipa/bitcoin-seeder crawler discovers new peers by asking
+# already-known ones for GETADDR/ADDR. Since Bitcoin Core ~v0.21, addr relay
+# to short-lived, crawler-style connections has been privacy-hardened and
+# largely doesn't respond the way this tool expects -- Defcoin-Core-Nu
+# inherits that behavior. Result: over a month of uptime the crawler's DB
+# never grew past its 2 hardcoded bootstrap seeds. Until/unless that's
+# addressed upstream, explicitly seed every peer address our own node
+# already knows about (`defcoin-cli getnodeaddresses`) so the DNS seed
+# actually has a useful pool to serve to new wallets.
+ExecStart=/home/defcoin/defcoin-seeder/dnsseed -h seed.fuckyyourcoins.com -n ns1seed.fuckyyourcoins.com -m admin.fuckyyourcoins.com --magic defc014e --p2port 1337 -s 40.87.31.48 -s 50.116.19.40 -s 24.52.248.184 -s 23.155.40.114 -s 66.42.91.225 -s 104.225.250.101 -s 20.125.148.47 -s 45.143.82.72 -s 136.61.132.224 -s 136.36.126.61 -s 185.219.141.122 -s 109.104.115.122 -s 52.210.16.29 -s 107.170.52.120 -s 199.204.23.50 -s 128.100.103.169 -s 73.52.182.204 -s 99.62.126.121 -s 135.148.43.188 -s 135.148.43.189
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target
