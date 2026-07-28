@@ -245,7 +245,7 @@ cat > "$POOL_DIR/config.json" <<EOF
             "historicalRetention": 43200,
             "hashrateWindow": 300
         },
-        "adminPassword": "CHANGE_ME_ADMIN_PASS",
+        "adminPassword": "${ADMIN_PASS}",
         "siteTitle": "Defcoin Mining Pool"
     },
     "switching": {
@@ -270,5 +270,3 @@ echo ""
 echo "=== Pool setup complete ==="
 echo "Test with: cd $POOL_DIR && node init.js"
 echo "Miners connect to: stratum+tcp://${POOL_DOMAIN}:3333"
-echo ""
-echo "IMPORTANT: Edit $POOL_DIR/config.json and change 'CHANGE_ME_ADMIN_PASS'"

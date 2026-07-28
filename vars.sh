@@ -8,6 +8,9 @@ export RPC_PASS="CHANGE_ME_STRONG_PASSWORD"
 # The wallet address that receives mining pool block rewards
 export POOL_WALLET_ADDRESS="CHANGE_ME_YOUR_DEFCOIN_ADDRESS"
 
+# Pool admin UI password (website/config.json)
+export ADMIN_PASS="CHANGE_ME_ADMIN_PASS"
+
 # Domain names for nginx/SSL (set to server IP if you have no domain)
 export EXPLORER_DOMAIN="explorer.yourdomain.com"
 export POOL_DOMAIN="pool.yourdomain.com"
